@@ -22,6 +22,10 @@ class Settings(BaseSettings):
         "http://localhost:5181",
         "http://127.0.0.1:5180",
         "http://127.0.0.1:5181",
+        "https://lamborghinichile.cl",
+        "https://www.lamborghinichile.cl",
+        "https://lamborghini-chile.web.app",
+        "https://lamborghini-admin.web.app",
     ]
 
 
