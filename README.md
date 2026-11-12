@@ -36,35 +36,79 @@ alembic upgrade head
 uvicorn app.main:app --reload --port 7776
 ```
 
-## Ubuntu systemd service (`lb`)
+## Ubuntu production (`lb` systemd + MySQL)
 
-Keeps the FastAPI API running permanently (restart on crash and on boot).
+Production path example: `/var/www/api.lamborghinichile.cl/public_html`
 
-1. Put the backend on the server (example path `/opt/lb/backend`).
-2. Create the venv and install deps:
+### MySQL (fix Ubuntu error 1698)
+
+On Ubuntu, `root@localhost` uses socket auth, so PyMySQL cannot connect as `root`.
+Create a dedicated user (run with `sudo mysql`):
 
 ```bash
-cd /opt/lb/backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env   # edit SECRET_KEY, DATABASE_URL, DEBUG=false, CORS, etc.
+sudo mysql -e "
+CREATE DATABASE IF NOT EXISTS lb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'lb'@'localhost' IDENTIFIED BY 'CHANGE_ME_STRONG_PASSWORD';
+GRANT ALL PRIVILEGES ON lb.* TO 'lb'@'localhost';
+FLUSH PRIVILEGES;
+"
+```
+
+In `.env`:
+
+```env
+DATABASE_URL=mysql+pymysql://lb:CHANGE_ME_STRONG_PASSWORD@127.0.0.1:3306/lb
+PERSISTENCE=sql
+DEBUG=false
+```
+
+Then migrate:
+
+```bash
+cd /var/www/api.lamborghinichile.cl/public_html
 .venv/bin/alembic upgrade head
 ```
 
-3. Install and enable the service:
+### systemd service (`lb`)
 
 ```bash
-sudo bash deploy/install-lb-service.sh /opt/lb/backend
+cd /var/www/api.lamborghinichile.cl/public_html
+sudo bash deploy/install-lb-service.sh
+# or explicitly:
+# sudo bash deploy/install-lb-service.sh /var/www/api.lamborghinichile.cl/public_html
 ```
 
-The unit file is `deploy/lb.service` (service name **`lb`**). It runs:
-
-`uvicorn app.main:app --host 0.0.0.0 --port 7776`
+Runs: `uvicorn app.main:app --host 0.0.0.0 --port 7776`
 
 ```bash
 sudo systemctl status lb
 sudo systemctl restart lb
 sudo journalctl -u lb -f
+```
+
+Docs locally: `http://127.0.0.1:7776/docs`
+
+### Reverse proxy (public HTTPS)
+
+`https://api.lamborghinichile.cl/docs` only works if Apache/Nginx proxies to `127.0.0.1:7776`.
+Sample configs: `deploy/apache-api.lamborghinichile.cl.conf` and `deploy/nginx-api.lamborghinichile.cl.conf`.
+
+Detect web server:
+
+```bash
+sudo ss -tlnp | grep -E ':80|:443'
+```
+
+Apache quick path:
+
+```bash
+sudo a2enmod proxy proxy_http headers rewrite ssl
+# Prefer editing the existing vhost for api.lamborghinichile.cl and add:
+#   ProxyPreserveHost On
+#   RequestHeader set X-Forwarded-Proto "https"
+#   ProxyPass / http://127.0.0.1:7776/
+#   ProxyPassReverse / http://127.0.0.1:7776/
+sudo apache2ctl configtest && sudo systemctl reload apache2
 ```
 
 ## Tests

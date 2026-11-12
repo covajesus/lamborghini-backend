@@ -2,11 +2,12 @@
 # Install and enable the systemd service "lb" for the FastAPI backend on Ubuntu.
 set -euo pipefail
 
-APP_DIR="${1:-/opt/lb/backend}"
 SERVICE_NAME="lb"
 SERVICE_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lb.service"
 SERVICE_DST="/etc/systemd/system/${SERVICE_NAME}.service"
-VENV_PY="${APP_DIR}/.venv/bin/python"
+# Default: parent of deploy/ (the backend root), unless an absolute path is passed.
+DEFAULT_APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP_DIR="${1:-$DEFAULT_APP_DIR}"
 UVICORN_BIN="${APP_DIR}/.venv/bin/uvicorn"
 
 if [[ "$(id -u)" -ne 0 ]]; then
@@ -16,7 +17,8 @@ fi
 
 if [[ ! -f "${APP_DIR}/app/main.py" ]]; then
   echo "Backend not found at: ${APP_DIR}"
-  echo "Usage: sudo bash deploy/install-lb-service.sh /path/to/backend"
+  echo "Your server path looks like: /var/www/api.lamborghinichile.cl/public_html"
+  echo "Usage: sudo bash deploy/install-lb-service.sh /var/www/api.lamborghinichile.cl/public_html"
   exit 1
 fi
 
